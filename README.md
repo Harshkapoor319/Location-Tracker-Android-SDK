@@ -71,7 +71,30 @@ To protect your intellectual property, this project is split into a **Two-Tier A
 
 ## 📦 Installation
 
-### Adding the Manager Module to Your Android Project
+### Option 1: Via JitPack (Recommended)
+
+1. Add JitPack repository in your project's `settings.gradle.kts`:
+   ```kotlin
+   dependencyResolutionManagement {
+       repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+       repositories {
+           google()
+           mavenCentral()
+           maven { url = uri("https://jitpack.io") }
+       }
+   }
+   ```
+   *(Or if using Groovy `settings.gradle`: `maven { url 'https://jitpack.io' }`)*
+
+2. Add the dependency in your application module (`app/build.gradle.kts`):
+   ```kotlin
+   dependencies {
+       implementation("com.github.Harshkapoor319:Location-Tracker-Android-SDK:v1.0.0")
+   }
+   ```
+   *(Or if using Groovy `app/build.gradle`: `implementation 'com.github.Harshkapoor319:Location-Tracker-Android-SDK:v1.0.0'`)*
+
+### Option 2: As a Local Module
 
 1. Include `bglocation-manager` in your `settings.gradle.kts`:
    ```kotlin
@@ -85,7 +108,7 @@ To protect your intellectual property, this project is split into a **Two-Tier A
    }
    ```
 
-> 🪄 **Zero Manifest Boilerplate**: You **DO NOT** need to add `<service>`, `<receiver>`, or `<uses-permission>` tags to your app's `AndroidManifest.xml`. `bglocation-manager` automatically merges all required permissions, the foreground `LocationService`, and the `BootReceiver` into your final APK at build time.
+> 🪄 **Zero Manifest Boilerplate**: You **DO NOT** need to add `<service>`, `<receiver>`, or `<uses-permission>` tags to your app's `AndroidManifest.xml`. All required permissions, the foreground `LocationService`, and the `BootReceiver` are automatically merged into your final APK at build time.
 
 ---
 
