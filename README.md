@@ -1,110 +1,123 @@
-# 🛰️ BGLocation SDK — Continuous Background Location Tracking for Android
+# 🛰️ BGLocation — Continuous Background Location Tracking for Android
 
-[![Min SDK](https://img.shields.io/badge/minSdk-24%20(Android%207.0)-brightgreen.svg)](#compatibility)
-[![Target SDK](https://img.shields.io/badge/compileSdk-36%20(Android%2016)-blue.svg)](#compatibility)
+[![Min SDK](https://img.shields.io/badge/minSdk-24%20(Android%207.0)-brightgreen.svg)](#-android-version-compatibility-api-24---36)
+[![Target SDK](https://img.shields.io/badge/compileSdk-36%20(Android%2016)-blue.svg)](#-android-version-compatibility-api-24---36)
 [![Language](https://img.shields.io/badge/Language-Kotlin%20%2F%20Java-orange.svg)](#)
+[![Architecture](https://img.shields.io/badge/Architecture-Private%20AAR%20%2B%20Public%20Manager-purple.svg)](#-architecture--security-model)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey.svg)](#)
 
-A plug-and-play, production-ready Android SDK that delivers **guaranteed continuous, real-time location updates** across **all** application states:
+A plug-and-play, enterprise-ready Android background location tracking library that guarantees **continuous, real-time location updates** across **all** application states:
 
-- 🟢 **Foreground**: App is open and in use.
-- 🟡 **Background**: App is minimized or the screen is locked.
-- 🔴 **Killed / Terminated**: App was swiped away from the Recent Apps list.
+- 🟢 **Foreground**: App is open and in active use.
+- 🟡 **Background**: App is minimized or the screen is turned off.
+- 🔴 **Killed / Swiped Away**: App was terminated from Recent Apps.
 - 🔵 **Rebooted**: Device was restarted or updated.
 
 ---
 
 ## 📑 Table of Contents
-1. [Why This SDK?](#-why-this-sdk)
+1. [Architecture & Security Model](#-architecture--security-model)
 2. [Installation](#-installation)
-3. [Step-by-Step Integration Guide (Which Methods to Call)](#-step-by-step-integration-guide)
-   - [Step 1: Initialize in Application](#step-1-initialize-in-application-class)
+3. [Quick Start Integration Guide](#-quick-start-integration-guide)
+   - [Step 1: Initialize in Application Class](#step-1-initialize-in-application-class)
    - [Step 2: Check & Request Permissions](#step-2-check--request-permissions)
    - [Step 3: Start Tracking](#step-3-start-tracking)
-   - [Step 4: Receive Live Location Updates](#step-4-receive-live-location-updates)
+   - [Step 4: Receive Real-Time Location Updates](#step-4-receive-real-time-location-updates)
    - [Step 5: Stop Tracking](#step-5-stop-tracking)
    - [Step 6: Access Stored History & Cache](#step-6-access-stored-location-history)
    - [Step 7: Handle Battery Optimizations](#step-7-handle-oem-battery-optimizations)
-4. [Complete Method Reference (`BGLocationTracker`)](#-complete-method-reference)
-5. [Configuration Reference (`BGLocationConfig`)](#-configuration-reference)
-6. [Android Version Compatibility (API 24 to API 36)](#-android-version-compatibility-api-24---36)
-7. [Publishing as an AAR / JitPack](#-publishing-as-an-aar--maven-library)
-8. [Troubleshooting & OEM Device Guidelines](#-troubleshooting--oem-guidelines)
+4. [Complete Method Reference (`LocationManager`)](#-complete-method-reference-locationmanager)
+5. [Configuration Reference (`LocationConfig`)](#-configuration-reference-locationconfig)
+6. [Data Model Reference (`LocationModel`)](#-data-model-reference-locationmodel)
+7. [SDK Maintainer Guide (Rebuilding Private Core Engine)](#-sdk-maintainer-guide)
+8. [Android Version Compatibility (API 24 to API 36)](#-android-version-compatibility-api-24---36)
+9. [OEM Device Troubleshooting](#-oem-device-troubleshooting)
 
 ---
 
-## 💡 Why This SDK?
+## 🛡️ Architecture & Security Model
 
-Android 8.0 through Android 15/16 impose strict restrictions on background location:
-- Without a Foreground Service, background location is throttled to **2–4 updates per hour**.
-- Android WorkManager has a minimum periodic interval of **15 minutes** and cannot provide continuous real-time streaming.
-- Android 12+ throws `ForegroundServiceStartNotAllowedException` if a background service is launched from the background.
+To protect your intellectual property, this project is split into a **Two-Tier Architecture**:
 
-### The Hybrid Solution
-This SDK combines an **Android Foreground Service** (for continuous 5–10 second streaming) with a **WorkManager Watchdog** (for crash resilience across kills). Because WorkManager runs as a system `JobService`, it is **exempt** from Android 12+ background launch limits, allowing it to resurrect the foreground service if the OS terminates it under memory pressure.
+```
+┌────────────────────────────────────────────────────────┐
+│                      Client App                        │
+│             (Imports :bglocation-manager)              │
+└──────────────────────────┬─────────────────────────────┘
+                           │ Calls public API
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│              Public Wrapper Module                     │
+│               (:bglocation-manager)                    │
+│  • Public LocationManager, LocationConfig, models      │
+│  • Automatic AndroidManifest merging                   │
+│  • Consumes closed-source engine via libs/*.aar        │
+└──────────────────────────┬─────────────────────────────┘
+                           │ Links compiled binary
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│              Private Core Engine                       │
+│                (:bglocation-sdk)                       │
+│  • Proprietary tracking engine, watchdog & database    │
+│  • Obfuscated release .aar binary in libs/             │
+│  • Source code is kept private & confidential          │
+└────────────────────────────────────────────────────────┘
+```
+
+- **For Client Developers**: You only add and interact with `bglocation-manager`. You never need to manage raw `.aar` files or add service/receiver tags to your manifest.
+- **For the Maintainer**: You develop proprietary algorithms inside `bglocation-sdk`, export the compiled/obfuscated `.aar` into `bglocation-manager/libs/`, and distribute `bglocation-manager` without exposing your proprietary source code.
 
 ---
 
 ## 📦 Installation
 
-### Option 1: As a Module in Your Android Studio Project
-1. Copy the `bglocation-sdk` folder into your Android project root.
-2. In your `settings.gradle.kts`:
+### Adding the Manager Module to Your Android Project
+
+1. Include `bglocation-manager` in your `settings.gradle.kts`:
    ```kotlin
-   include(":bglocation-sdk")
+   include(":bglocation-manager")
    ```
-3. In your app's `app/build.gradle.kts`:
+
+2. Add the dependency in your application module (`app/build.gradle.kts`):
    ```kotlin
    dependencies {
-       implementation(project(":bglocation-sdk"))
+       implementation(project(":bglocation-manager"))
    }
    ```
 
-### Option 2: As an AAR File
-1. Build the library: `./gradlew :bglocation-sdk:assembleRelease`
-2. Copy `bglocation-sdk/build/outputs/aar/bglocation-sdk-release.aar` into your app's `libs/` folder.
-3. In your app's `app/build.gradle.kts`:
-   ```kotlin
-   dependencies {
-       implementation(files("libs/bglocation-sdk-release.aar"))
-   }
-   ```
-
-> 🪄 **Automatic Manifest Merging**: You **DO NOT** need to add `<service>`, `<receiver>`, or `<uses-permission>` tags into your host app's `AndroidManifest.xml`. The SDK manifest is automatically merged into your APK during compilation!
+> 🪄 **Zero Manifest Boilerplate**: You **DO NOT** need to add `<service>`, `<receiver>`, or `<uses-permission>` tags to your app's `AndroidManifest.xml`. `bglocation-manager` automatically merges all required permissions, the foreground `LocationService`, and the `BootReceiver` into your final APK at build time.
 
 ---
 
-## 🚀 Step-by-Step Integration Guide
-
-Here is the exact sequence of methods to call in your app.
+## 🚀 Quick Start Integration Guide
 
 ### Step 1: Initialize in `Application` Class
-Call `BGLocationTracker.initialize()` inside your `Application.onCreate()`. This registers your notification channel and sets default tracking parameters.
+Initialize `LocationManager` inside your `Application.onCreate()`. This registers the notification channel and sets default tracking parameters.
 
 ```kotlin
 import android.app.Application
-import com.it.bglocation.sdk.BGLocationConfig
-import com.it.bglocation.sdk.BGLocationTracker
+import com.it.bglocation.manager.LocationConfig
+import com.it.bglocation.manager.LocationManager
 
 class MyApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // Customize settings using the Builder (all parameters are optional)
-        val config = BGLocationConfig.Builder()
+        // Customize configuration (all builder parameters are optional)
+        val config = LocationConfig.Builder()
             .setInterval(10000L)              // Location request interval: 10 seconds
             .setFastestInterval(5000L)        // Fastest interval: 5 seconds
-            .setMinDistanceMeters(0f)         // Receive all updates regardless of distance
-            .setNotificationTitle("Delivery Tracker Active")
-            .setNotificationContent("Continuous location tracking in progress...")
-            .setEnableWatchdog(true)          // WorkManager watchdog enabled
-            .setWatchdogIntervalMinutes(15L)  // Check every 15 min if service died
-            .setEnableBootRestart(true)       // Auto-restart after phone reboot
-            .setMaxHistoryCount(100)          // Keep latest 100 coordinates
+            .setMinDistanceMeters(0f)         // Update regardless of distance moved
+            .setNotificationTitle("Location Tracking Active")
+            .setNotificationContent("Continuous real-time tracking in progress...")
+            .setEnableWatchdog(true)          // WorkManager watchdog enabled (resurrects service on kill)
+            .setWatchdogIntervalMinutes(15L)  // Check every 15 minutes
+            .setEnableBootRestart(true)       // Auto-restart tracking after phone reboot
+            .setMaxHistoryCount(100)          // Keep latest 100 coordinates in local storage
             .build()
 
-        // 👈 METHOD TO CALL: Initialize SDK
-        BGLocationTracker.initialize(this, config)
+        // 👈 Initialize the manager
+        LocationManager.init(this, config)
     }
 }
 ```
@@ -112,65 +125,81 @@ class MyApp : Application() {
 ---
 
 ### Step 2: Check & Request Permissions
-Android 11+ strictly requires a **two-step permission flow**: request Foreground Location first, then Background Location.
+Android 11+ strictly requires a **two-step permission flow**: request Foreground Location (+ Notifications on Android 13+) first, followed by Background Location.
+
+`LocationManager` provides built-in helper methods to make this seamless:
 
 ```kotlin
 import android.Manifest
+import android.content.Intent
 import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.it.bglocation.sdk.BGLocationTracker
+import com.it.bglocation.manager.LocationManager
 
 class MainActivity : AppCompatActivity() {
 
-    // 1. Foreground permissions launcher (Fine + Coarse + Notifications)
+    // 1. Foreground Location and Notification permissions launcher
     private val foregroundPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (BGLocationTracker.hasRequiredPermissions(this)) {
-            // Once foreground is granted, prompt for background location
-            checkBackgroundPermission()
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+
+        if (fineGranted || coarseGranted) {
+            checkAndRequestBackgroundLocation()
+        } else {
+            Toast.makeText(this, "Location permission is required for tracking", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // 2. Background location launcher (Android 10+ / API 29+)
+    // 2. Background Location launcher (Android 10+ / API 29+)
     private val backgroundLocationLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        // Start tracking regardless — Foreground Service works in both cases
+    ) {
+        // Start tracking regardless — Foreground Service operates in both states
         startTracking()
     }
 
-    private fun checkPermissionsAndStart() {
-        // 👈 METHOD TO CALL: Check GPS enabled
-        if (!BGLocationTracker.isGpsEnabled(this)) {
-            // Prompt user to enable device GPS
+    private fun handleStartTrackingClick() {
+        // Step 2a: Check if GPS is enabled
+        if (!LocationManager.isGpsEnabled(this)) {
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
             return
         }
 
-        // 👈 METHOD TO CALL: Check required foreground permissions
-        if (!BGLocationTracker.hasRequiredPermissions(this)) {
-            // 👈 METHOD TO CALL: Get permissions array
-            foregroundPermissionsLauncher.launch(BGLocationTracker.getRequiredForegroundPermissions())
+        // Step 2b: Check required foreground permissions
+        if (!LocationManager.hasRequiredPermissions(this)) {
+            foregroundPermissionsLauncher.launch(LocationManager.getRequiredForegroundPermissions())
         } else {
-            checkBackgroundPermission()
+            checkAndRequestBackgroundLocation()
         }
     }
 
-    private fun checkBackgroundPermission() {
-        // 👈 METHOD TO CALL: Check background permission
+    private fun checkAndRequestBackgroundLocation() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && 
-            !BGLocationTracker.hasBackgroundPermission(this)) {
-            // Show educational dialog explaining why background location is needed, then:
-            backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            !LocationManager.hasBackgroundPermission(this)) {
+            AlertDialog.Builder(this)
+                .setTitle("Background Location Permission")
+                .setMessage("To track your location continuously when minimized or killed, please select 'Allow all the time'.")
+                .setPositiveButton("Continue") { _, _ ->
+                    backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                }
+                .setNegativeButton("Skip") { _, _ ->
+                    startTracking()
+                }
+                .show()
         } else {
             startTracking()
         }
     }
 
     private fun startTracking() {
-        // 👈 METHOD TO CALL: Start tracking
-        BGLocationTracker.startTracking(this)
+        LocationManager.startTracking(this)
     }
 }
 ```
@@ -178,44 +207,49 @@ class MainActivity : AppCompatActivity() {
 ---
 
 ### Step 3: Start Tracking
-Call `BGLocationTracker.startTracking(context)`.
+To start continuous tracking, call:
 
 ```kotlin
-// Starts Foreground Service + ongoing persistent notification + WorkManager watchdog
-BGLocationTracker.startTracking(context)
+// Starts persistent Foreground Service, displays ongoing notification & arms watchdog
+LocationManager.startTracking(context)
 ```
 
 ---
 
-### Step 4: Receive Live Location Updates
+### Step 4: Receive Real-Time Location Updates
 
-#### Method A: Using Kotlin Coroutines `StateFlow` (Recommended)
+#### Option A: Using Kotlin Coroutines `StateFlow` (Recommended)
+`LocationManager.getLocationFlow(context)` emits real-time `LocationModel` objects whenever new coordinates arrive.
+
 ```kotlin
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.it.bglocation.manager.LocationManager
 import kotlinx.coroutines.launch
 
 lifecycleScope.launch {
     repeatOnLifecycle(Lifecycle.State.STARTED) {
-        
-        // 👈 METHOD TO CALL: Observe real-time coordinates
+        // 1. Observe real-time location stream
         launch {
-            BGLocationTracker.getLocationFlow(context).collect { location ->
+            LocationManager.getLocationFlow(this@MainActivity).collect { location ->
                 location?.let {
                     val lat = it.latitude
                     val lng = it.longitude
                     val accuracy = it.accuracy
                     val speed = it.speed
+                    val altitude = it.altitude
                     val time = it.getFormattedTime()
-                    println("Received: $lat, $lng (Acc: ${accuracy}m at $time)")
+                    val source = it.source
+
+                    println("Update: $lat, $lng (Acc: ${accuracy}m at $time via $source)")
                 }
             }
         }
 
-        // 👈 METHOD TO CALL: Observe tracking toggle state (true/false)
+        // 2. Observe tracking state (true/false) to toggle UI buttons
         launch {
-            BGLocationTracker.getTrackingStateFlow(context).collect { isTracking ->
+            LocationManager.getTrackingStateFlow(this@MainActivity).collect { isTracking ->
                 btnStart.isEnabled = !isTracking
                 btnStop.isEnabled = isTracking
             }
@@ -224,159 +258,193 @@ lifecycleScope.launch {
 }
 ```
 
-#### Method B: Using Listener Callback (Java or Non-Coroutines)
+#### Option B: Using Java / Callback Listener
+For Java codebases or non-coroutine architectures:
+
 ```kotlin
-import com.it.bglocation.sdk.callback.LocationListener
+import com.it.bglocation.manager.LocationListener
+import com.it.bglocation.manager.LocationManager
 
 // Define listener
 val listener = LocationListener { location ->
-    println("New location: ${location.latitude}, ${location.longitude}")
+    println("New Location: ${location.latitude}, ${location.longitude}")
 }
 
-// 👈 METHOD TO CALL: Register listener
-BGLocationTracker.addLocationListener(listener)
+// Register listener (e.g., in onStart or onResume)
+LocationManager.addListener(listener)
 
-// 👈 METHOD TO CALL: Unregister when done (e.g., onDestroy)
-BGLocationTracker.removeLocationListener(listener)
+// Unregister listener (e.g., in onStop or onDestroy)
+LocationManager.removeListener(listener)
 ```
 
 ---
 
 ### Step 5: Stop Tracking
-Call `BGLocationTracker.stopTracking(context)` whenever tracking is no longer needed.
+Call `LocationManager.stopTracking(context)` to shut down the foreground service, remove the persistent notification, and cancel the WorkManager watchdog:
 
 ```kotlin
-// 👈 METHOD TO CALL: Stops Foreground Service, removes notification & cancels watchdog
-BGLocationTracker.stopTracking(context)
+LocationManager.stopTracking(context)
 ```
 
 ---
 
 ### Step 6: Access Stored Location History
-The SDK automatically persists recorded coordinates so they survive app restarts and kills.
+The SDK automatically persists recorded coordinates locally so you can inspect travel history even across device reboots and app kills:
 
 ```kotlin
-// 👈 METHOD TO CALL: Get the most recent location recorded
-val lastLocation = BGLocationTracker.getLastLocation(context)
+// Get the most recent location record
+val lastLocation = LocationManager.getLastLocation(context)
 
-// 👈 METHOD TO CALL: Get the list of last 100 recorded locations
-val historyList = BGLocationTracker.getLocationHistory(context)
+// Get list of recorded locations (up to maxHistoryCount)
+val historyList = LocationManager.getLocationHistory(context)
 
-// 👈 METHOD TO CALL: Get total count of recorded coordinates
-val totalCount = BGLocationTracker.getLocationCount(context)
+// Get total count of recorded coordinates
+val count = LocationManager.getLocationCount(context)
 
-// 👈 METHOD TO CALL: Clear all saved history
-BGLocationTracker.clearLocationHistory(context)
+// Clear all stored coordinates
+LocationManager.clearHistory(context)
 ```
 
 ---
 
 ### Step 7: Handle OEM Battery Optimizations
-Aggressive manufacturers (Samsung, Xiaomi, Oppo, Vivo, OnePlus) kill background services unless battery optimization is disabled.
+Custom OEM operating systems (Samsung, Xiaomi, Oppo, Vivo, OnePlus) may kill background processes unless battery optimization is disabled.
 
 ```kotlin
-// 👈 METHOD TO CALL: Check if battery optimization is already disabled
-if (!BGLocationTracker.isIgnoringBatteryOptimizations(context)) {
-    // 👈 METHOD TO CALL: Launch system dialog to exempt app from battery saver
-    startActivity(BGLocationTracker.createIgnoreBatteryOptimizationIntent(context))
+// Check if battery optimization is already disabled
+if (!LocationManager.isIgnoringBatteryOptimizations(context)) {
+    try {
+        // Open the system dialog asking the user to exempt the app
+        startActivity(LocationManager.createIgnoreBatteryOptimizationIntent(context))
+    } catch (e: Exception) {
+        startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+    }
 }
 ```
 
 ---
 
-## 📖 Complete Method Reference
+## 📖 Complete Method Reference (`LocationManager`)
 
-All public methods are accessible statically via `BGLocationTracker`:
+All public methods are accessed statically via `LocationManager`:
 
 | Method | Return Type | Description |
 |---|---|---|
-| `initialize(context, config)` | `Unit` | Sets configuration, initializes notification channel. Call in `Application.onCreate()`. |
-| `startTracking(context)` | `Unit` | Starts continuous Foreground Service & arms WorkManager watchdog. |
-| `stopTracking(context)` | `Unit` | Stops Foreground Service, removes ongoing notification & cancels watchdog. |
+| `init(context, config)` | `Unit` | Initializes SDK parameters and creates the notification channel. Call in `Application.onCreate()`. |
+| `startTracking(context)` | `Unit` | Starts continuous tracking via Foreground Service and arms WorkManager watchdog. |
+| `stopTracking(context)` | `Unit` | Stops tracking, dismisses ongoing notification, and cancels watchdog. |
 | `isTracking(context)` | `Boolean` | Returns `true` if continuous tracking is enabled. |
-| `isServiceRunning()` | `Boolean` | Returns `true` if the Foreground Service is alive right now. |
-| `getLocationFlow(context)` | `StateFlow<LocationModel?>` | Reactive Kotlin StateFlow emitting new coordinates in real-time. |
+| `isServiceRunning()` | `Boolean` | Returns `true` if the Foreground Service is actively running right now. |
+| `getLocationFlow(context)` | `StateFlow<LocationModel?>` | Reactive Kotlin StateFlow emitting live coordinates. |
 | `getTrackingStateFlow(context)` | `StateFlow<Boolean>` | Reactive Kotlin StateFlow emitting tracking state changes (`true`/`false`). |
-| `addLocationListener(listener)` | `Unit` | Adds a callback listener to receive location updates. |
-| `removeLocationListener(listener)` | `Unit` | Removes a previously registered callback listener. |
-| `getLastLocation(context)` | `LocationModel?` | Returns the last known recorded location from persistent cache. |
-| `getLocationHistory(context)` | `List<LocationModel>` | Returns list of recent coordinates recorded while backgrounded/killed. |
-| `clearLocationHistory(context)` | `Unit` | Clears all cached coordinates. |
-| `getLocationCount(context)` | `Int` | Returns the total number of recorded locations. |
-| `hasRequiredPermissions(context)` | `Boolean` | Returns `true` if Fine/Coarse and Notification permissions are granted. |
-| `hasBackgroundPermission(context)` | `Boolean` | Returns `true` if `ACCESS_BACKGROUND_LOCATION` is granted (always `true` on < Android 10). |
-| `getRequiredForegroundPermissions()`| `Array<String>` | Returns array of permissions to pass to `ActivityResultLauncher`. |
-| `isGpsEnabled(context)` | `Boolean` | Returns `true` if device GPS or Network location provider is turned on. |
-| `isIgnoringBatteryOptimizations(c)` | `Boolean` | Returns `true` if app is exempt from OS battery restrictions. |
-| `createIgnoreBatteryOptimizationIntent(c)` | `Intent` | Returns intent to prompt user for battery exemption. |
+| `addListener(listener)` | `Unit` | Adds a callback listener for location updates. |
+| `removeListener(listener)` | `Unit` | Removes a registered callback listener. |
+| `getLastLocation(context)` | `LocationModel?` | Returns the most recent cached location record. |
+| `getLocationHistory(context)` | `List<LocationModel>` | Returns list of recent location records. |
+| `clearHistory(context)` | `Unit` | Clears all stored coordinates from local storage. |
+| `getLocationCount(context)` | `Int` | Returns the total count of recorded locations. |
+| `hasRequiredPermissions(context)` | `Boolean` | Checks if Fine/Coarse and Notification permissions are granted. |
+| `hasBackgroundPermission(context)` | `Boolean` | Checks if `ACCESS_BACKGROUND_LOCATION` is granted. |
+| `getRequiredForegroundPermissions()` | `Array<String>` | Returns array of permissions to request for foreground tracking. |
+| `isGpsEnabled(context)` | `Boolean` | Checks if device GPS or Network location providers are enabled. |
+| `isIgnoringBatteryOptimizations(context)` | `Boolean` | Checks if app is exempt from OS battery saver restrictions. |
+| `createIgnoreBatteryOptimizationIntent(context)` | `Intent` | Intent to prompt user for battery saver exemption. |
 
 ---
 
-## ⚙️ Configuration Reference
+## ⚙️ Configuration Reference (`LocationConfig`)
 
-Use `BGLocationConfig.Builder()` to customize the SDK:
+Configure parameters using `LocationConfig.Builder()`:
 
 | Builder Method | Default Value | Description |
 |---|---|---|
-| `.setInterval(ms: Long)` | `10000L` (10s) | Location request interval in milliseconds. |
+| `.setInterval(ms: Long)` | `10000L` (10s) | Desired location request interval in milliseconds. |
 | `.setFastestInterval(ms: Long)` | `5000L` (5s) | Fastest interval your app can handle location updates. |
-| `.setMinDistanceMeters(m: Float)`| `0f` | Minimum movement distance in meters to trigger an update. |
+| `.setMinDistanceMeters(m: Float)` | `0f` | Minimum movement distance in meters to trigger an update. |
 | `.setNotificationTitle(title: String)` | `"Location Tracking Active"` | Title shown on the persistent foreground notification. |
-| `.setNotificationContent(content: String)` | `"Tracking continuous location in background..."` | Body text shown on the notification. |
-| `.setNotificationIcon(iconResId: Int)` | `ic_menu_mylocation` | Drawable resource ID for the notification icon. |
+| `.setNotificationContent(content: String)` | `"Tracking continuous location in background..."` | Body text shown on the persistent notification. |
+| `.setNotificationIcon(iconResId: Int)` | `android.R.drawable.ic_menu_mylocation` | Drawable resource ID for the notification icon. |
 | `.setNotificationChannel(id, name)` | `"continuous_location_channel"` | Custom notification channel ID and display name. |
-| `.setEnableWatchdog(enable: Boolean)` | `true` | Enables WorkManager periodic health-check watchdog. |
-| `.setWatchdogIntervalMinutes(min: Long)` | `15L` | Interval for WorkManager watchdog (min: 15 minutes). |
-| `.setEnableBootRestart(enable: Boolean)` | `true` | Automatically resumes tracking after phone restarts. |
-| `.setMaxHistoryCount(count: Int)` | `100` | Maximum number of location records kept in cache. |
+| `.setEnableWatchdog(enable: Boolean)` | `true` | Enables periodic WorkManager watchdog to revive service on kill. |
+| `.setWatchdogIntervalMinutes(min: Long)` | `15L` | Watchdog periodic check interval (minimum allowed by Android is 15m). |
+| `.setEnableBootRestart(enable: Boolean)` | `true` | Automatically restarts tracking when device reboots. |
+| `.setMaxHistoryCount(count: Int)` | `100` | Maximum number of location records retained in local cache. |
+
+---
+
+## 📊 Data Model Reference (`LocationModel`)
+
+The `LocationModel` (also aliased as `LocationData`) object contains full geospatial and telemetry data:
+
+| Property | Type | Description |
+|---|---|---|
+| `latitude` | `Double` | Latitude in degrees. |
+| `longitude` | `Double` | Longitude in degrees. |
+| `accuracy` | `Float` | Estimated horizontal accuracy radius in meters. |
+| `altitude` | `Double` | Altitude in meters above the WGS 84 reference ellipsoid. |
+| `speed` | `Float` | Speed in meters/second. |
+| `bearing` | `Float` | Bearing in degrees (0.0 to 360.0). |
+| `timestamp` | `Long` | UTC timestamp in milliseconds. |
+| `source` | `String` | Source provider (e.g., `"FUSED"`, `"GPS"`, `"NETWORK"`, `"RESTORED"`). |
+| `getFormattedTime()` | `String` | Helper function returning timestamp formatted as `yyyy-MM-dd HH:mm:ss`. |
+
+---
+
+## 🛠️ SDK Maintainer Guide
+
+If you are updating the proprietary tracking algorithms in `bglocation-sdk`:
+
+### 1. Make Changes to Core Engine
+Edit code inside `bglocation-sdk/src/main/java/...`.
+
+### 2. Build & Export Obfuscated `.aar`
+Run the automated Gradle task:
+
+```bash
+# On Windows
+.\gradlew.bat :bglocation-sdk:buildAndExportAar
+
+# On Linux / macOS
+./gradlew :bglocation-sdk:buildAndExportAar
+```
+
+This task:
+1. Compiles `bglocation-sdk` in `release` mode with ProGuard / R8 code obfuscation.
+2. Automatically copies `bglocation-sdk-release.aar` into `bglocation-manager/libs/`.
+3. `bglocation-manager` will automatically unpack and link `classes.jar` during build/sync.
+
+### 3. Commit / Distribute
+You can commit and share `bglocation-manager` publicly. The core source code inside `bglocation-sdk` remains safe, private, and closed-source on your private repository.
 
 ---
 
 ## 📱 Android Version Compatibility (API 24 - 36)
 
-The SDK handles all OS-level differences internally:
+The SDK dynamically adapts to every Android release from API 24 through API 36:
 
-| Version | API | How the SDK Handles It |
+| Version | API | OS Specifics Handled Internally |
 |---|---|---|
-| **Android 7.0–7.1** | **24–25** | Standard background service execution and baseline location permissions. |
-| **Android 8.0–8.1** | **26–27** | Checks `Build.VERSION_CODES.O`: Creates Notification Channel; promotes service to foreground via `startForegroundService()`. |
-| **Android 9.0** | **28** | Declares `android.permission.FOREGROUND_SERVICE` in manifest. |
-| **Android 10** | **29** | Declares `foregroundServiceType="location"`; handles `ACCESS_BACKGROUND_LOCATION`. |
-| **Android 11** | **30** | Supports Google's 2-step permission mandate (separate foreground and background prompts). |
-| **Android 12–12L** | **31–32** | All `PendingIntent`s use `FLAG_IMMUTABLE`. WorkManager watchdog holds OS exemption against background launch limits. |
-| **Android 13** | **33** | Dynamically checks and requests `POST_NOTIFICATIONS` runtime permission. |
-| **Android 14** | **34** | Declares `FOREGROUND_SERVICE_LOCATION` permission; uses `ServiceCompat.startForeground` with location type. |
-| **Android 15–16** | **35–36** | Location services with ongoing notification are exempt from 6-hour timeouts; 16KB memory page compatible. |
+| **Android 7.0–7.1** | **24–25** | Standard service execution and baseline location permissions. |
+| **Android 8.0–8.1** | **26–27** | Notification channels, `startForegroundService()` promotion. |
+| **Android 9.0** | **28** | `FOREGROUND_SERVICE` permission integration. |
+| **Android 10** | **29** | `foregroundServiceType="location"`, two-step `ACCESS_BACKGROUND_LOCATION`. |
+| **Android 11** | **30** | Separate background permission prompt flow requirement. |
+| **Android 12–12L** | **31–32** | `PendingIntent.FLAG_IMMUTABLE`, WorkManager system exemption for background starts. |
+| **Android 13** | **33** | Runtime `POST_NOTIFICATIONS` permission integration. |
+| **Android 14** | **34** | `FOREGROUND_SERVICE_LOCATION` permission, `ServiceCompat` location type. |
+| **Android 15–16** | **35–36** | Exempt from 6-hour foreground service timeout; **16KB memory page size compatible**. |
 
 ---
 
-## 🚢 Publishing as an AAR / Maven Library
+## 🔍 OEM Device Troubleshooting
 
-The `bglocation-sdk` module includes the Gradle `maven-publish` plugin.
+### 1. Tracking stops when app is swiped away on Xiaomi / Samsung / OnePlus?
+Aggressive battery optimizers terminate background processes.
+- **Fix**: Request battery optimization exemption using `LocationManager.createIgnoreBatteryOptimizationIntent(context)`.
+- If terminated by OEM memory cleaners, the **WorkManager Watchdog** will automatically resurrect tracking within its periodic window.
 
-- **Generate Standalone `.aar`**:
-  ```bash
-  ./gradlew :bglocation-sdk:assembleRelease
-  ```
-  The compiled `.aar` will be located at:
-  `bglocation-sdk/build/outputs/aar/bglocation-sdk-release.aar`
+### 2. Can the persistent notification be removed?
+No. Starting with Android 8.0 (API 26), Google mandates an ongoing persistent notification for any service maintaining active background location tracking. Users can tap the notification or call `LocationManager.stopTracking(context)` to stop tracking cleanly.
 
-- **Publish to Local Maven Cache (`~/.m2`)**:
-  ```bash
-  ./gradlew :bglocation-sdk:publishToMavenLocal
-  ```
-
----
-
-## 🛠️ Troubleshooting & OEM Guidelines
-
-### 1. App killed when swiped away on Xiaomi / Samsung / OnePlus?
-Chinese and custom Android skins have aggressive battery optimizers.
-- **Solution**: Call `BGLocationTracker.createIgnoreBatteryOptimizationIntent(context)` and prompt the user to select **"No restrictions / Don't optimize"**.
-- The WorkManager watchdog will automatically relaunch the service during the next periodic window.
-
-### 2. Can the notification be dismissed?
-No. Android OS mandates an ongoing, persistent notification for any Foreground Service performing real-time location tracking. Tapping the "Stop Tracking" button on the notification cleanly stops the service.
-
-### 3. Does tracking survive device reboots?
-Yes! The SDK includes a `BootReceiver` that listens for `BOOT_COMPLETED`. If tracking was active before shutdown, it automatically relaunches upon reboot.
+### 3. Does tracking resume after phone reboot?
+Yes! The library includes a `BootReceiver` that listens for `BOOT_COMPLETED`. If tracking was active before shutdown, it automatically relaunches upon system boot.
