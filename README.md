@@ -89,10 +89,10 @@ To protect your intellectual property, this project is split into a **Two-Tier A
 2. Add the dependency in your application module (`app/build.gradle.kts`):
    ```kotlin
    dependencies {
-       implementation("com.github.Harshkapoor319:Location-Tracker-Android-SDK:v1.0.0")
+        implementation("com.github.Harshkapoor319:Location-Tracker-Android-SDK:v1.0.1")
    }
    ```
-   *(Or if using Groovy `app/build.gradle`: `implementation 'com.github.Harshkapoor319:Location-Tracker-Android-SDK:v1.0.0'`)*
+   *(Or if using Groovy `app/build.gradle`: `implementation 'com.github.Harshkapoor319:Location-Tracker-Android-SDK:v1.0.1'`)*
 
 ### Option 2: As a Local Module
 
